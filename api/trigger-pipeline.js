@@ -46,33 +46,78 @@ export default async function handler(req, res) {
 
     console.log(`Successfully triggered pipeline with mode: ${mode}, today_only: ${today_only}`);
     
-    // 触发 fund-daily-view 的收益计算
-    try {
-      const dailyViewResponse = await fetch(
-        `https://api.github.com/repos/YiZhiYuanYuan-qyy/fund_daily_view/actions/workflows/run-daily-view.yml/dispatches`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `token ${process.env.GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'User-Agent': 'Vercel-Trigger-Pipeline'
-          },
-          body: JSON.stringify({
-            ref: 'main',
-            inputs: {
-              mode: 'profit'
-            }
-          })
-        }
-      );
+    // 等待 fund-sync workflow 完成后再触发 fund-daily-view
+    console.log('Waiting for fund-sync workflow to complete...');
+    
+    // 轮询检查 workflow 状态
+    let attempts = 0;
+    const maxAttempts = 60; // 最多等待30分钟
+    
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 30000)); // 等待30秒
+      attempts++;
       
-      if (dailyViewResponse.ok) {
-        console.log('Successfully triggered fund-daily-view calculation');
-      } else {
-        console.log('Failed to trigger fund-daily-view calculation:', dailyViewResponse.status);
+      try {
+        // 检查最新的 workflow run 状态
+        const workflowResponse = await fetch(
+          `https://api.github.com/repos/YiZhiYuanYuan-qyy/fund_sync/actions/workflows/run-notion-pipeline.yml/runs?per_page=1`,
+          {
+            headers: {
+              'Authorization': `token ${process.env.GITHUB_TOKEN}`,
+              'Accept': 'application/vnd.github.v3+json',
+              'User-Agent': 'Vercel-Trigger-Pipeline'
+            }
+          }
+        );
+        
+        if (workflowResponse.ok) {
+          const workflowData = await workflowResponse.json();
+          const latestRun = workflowData.workflow_runs[0];
+          
+          if (latestRun && latestRun.status === 'completed') {
+            console.log(`Fund-sync workflow completed with conclusion: ${latestRun.conclusion}`);
+            
+            if (latestRun.conclusion === 'success') {
+              // 成功完成后触发 fund-daily-view
+              console.log('Triggering fund-daily-view calculation...');
+              const dailyViewResponse = await fetch(
+                `https://api.github.com/repos/YiZhiYuanYuan-qyy/fund_daily_view/actions/workflows/run-daily-view.yml/dispatches`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `token ${process.env.GITHUB_TOKEN}`,
+                    'Accept': 'application/vnd.github.v3+json',
+                    'User-Agent': 'Vercel-Trigger-Pipeline'
+                  },
+                  body: JSON.stringify({
+                    ref: 'main',
+                    inputs: {
+                      mode: 'profit'
+                    }
+                  })
+                }
+              );
+              
+              if (dailyViewResponse.ok) {
+                console.log('Successfully triggered fund-daily-view calculation');
+              } else {
+                console.log('Failed to trigger fund-daily-view calculation:', dailyViewResponse.status);
+              }
+            } else {
+              console.log('Fund-sync workflow failed, skipping fund-daily-view trigger');
+            }
+            break;
+          } else {
+            console.log(`Fund-sync workflow status: ${latestRun?.status}, waiting... (attempt ${attempts}/${maxAttempts})`);
+          }
+        }
+      } catch (error) {
+        console.log(`Error checking workflow status (attempt ${attempts}):`, error.message);
       }
-    } catch (error) {
-      console.log('Error triggering fund-daily-view calculation:', error.message);
+    }
+    
+    if (attempts >= maxAttempts) {
+      console.log('Timeout waiting for fund-sync workflow completion');
     }
     
     return res.status(200).json({
