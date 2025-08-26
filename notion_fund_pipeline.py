@@ -3,7 +3,7 @@
 
 """Notion Funds Pipeline
 
-1) 交易流水 → 自动关联/创建持仓、补基金名称、补“数据看板”(💰)
+1) 交易流水 → 自动关联/创建持仓、补基金名称
 2) 持仓行情更新（fundgz 优先，东财 F10 兜底）
 3) 仓位写入（持仓成本 / 全部成本）
 """
@@ -27,8 +27,7 @@ HOLDINGS_DB_ID = (
     or ""
 ).strip()
 TRADES_DB_ID = os.getenv("TRADES_DB_ID", "").strip()
-# 可选：数据看板库ID（否则自动从持仓表的 relation schema 解析）
-DASHBOARD_DB_ID = os.getenv("DASHBOARD_DB_ID", "").strip()
+
 
 # ============== 字段名（按你的库实际改） ==============
 # 交易流水表
@@ -39,7 +38,6 @@ TRADE_RELATION_PROP = "Fund 持仓"        # Relation → 持仓表
 # 持仓表
 HOLDING_TITLE_PROP = "基金名称"          # Title
 HOLDING_CODE_PROP = "Code"              # Rich text
-HOLDING_DASHBOARD_REL_PROP = "数据看板"  # Relation → 数据看板库
 
 # 行情字段（持仓表）
 FIELD = {
@@ -312,131 +310,11 @@ def set_trade_name(trade_page_id: str, name: str) -> None:
     notion_request("PATCH", f"/pages/{trade_page_id}", {"properties": payload})
 
 
-# ================ 数据看板 Relation（icon=💰） ================
-_DASHBOARD_DB_ID_CACHE: Optional[str] = None
-_MONEYBAG_PAGE_ID_CACHE: Optional[str] = None
-
-
-def get_dashboard_db_id() -> Optional[str]:
-    global _DASHBOARD_DB_ID_CACHE
-    if DASHBOARD_DB_ID:
-        return DASHBOARD_DB_ID
-    if _DASHBOARD_DB_ID_CACHE:
-        return _DASHBOARD_DB_ID_CACHE
-    db = notion_request("GET", f"/databases/{HOLDINGS_DB_ID}")
-    p = (db.get("properties") or {}).get(HOLDING_DASHBOARD_REL_PROP)
-    if p and p.get("type") == "relation":
-        _DASHBOARD_DB_ID_CACHE = (p.get("relation") or {}).get("database_id")
-    return _DASHBOARD_DB_ID_CACHE
-
-
-def _scan_pick_moneybag(pages: list) -> Optional[str]:
-    # 1) emoji=💰
-    for pg in pages:
-        icon = pg.get("icon")
-        if icon and icon.get("type") == "emoji" and icon.get("emoji") == "💰":
-            return pg["id"]
-    # 2) 标题包含 💰
-    for pg in pages:
-        props = pg.get("properties", {})
-        title_prop = next(
-            (props[k] for k, v in props.items() if v.get("type") == "title"),
-            None,
-        )
-        name = get_prop_text(title_prop)
-        if "💰" in name:
-            return pg["id"]
-    # 3) 标题包含 “数据看板”
-    for pg in pages:
-        props = pg.get("properties", {})
-        title_prop = next(
-            (props[k] for k, v in props.items() if v.get("type") == "title"),
-            None,
-        )
-        name = get_prop_text(title_prop)
-        if "数据看板" in name:
-            return pg["id"]
-    return None
-
-
-def find_moneybag_page_id() -> Optional[str]:
-    global _MONEYBAG_PAGE_ID_CACHE
-    if _MONEYBAG_PAGE_ID_CACHE:
-        return _MONEYBAG_PAGE_ID_CACHE
-    dbid = get_dashboard_db_id()
-    if not dbid:
-        return None
-
-    cursor = None
-    pages: list = []
-    while True:
-        payload = {"page_size": 100}
-        if cursor:
-            payload["start_cursor"] = cursor
-        data = notion_request("POST", f"/databases/{dbid}/query", payload)
-        pages.extend(data.get("results") or [])
-        cursor = data.get("next_cursor")
-        if not data.get("has_more"):
-            break
-
-    target = _scan_pick_moneybag(pages)
-    if target:
-        _MONEYBAG_PAGE_ID_CACHE = target
-    return _MONEYBAG_PAGE_ID_CACHE
-
-
-def ensure_holding_dashboard_relation(holding_page_id: str) -> None:
-    target_id = find_moneybag_page_id()
-    if not target_id:
-        return
-    pg = get_page_properties(holding_page_id)
-    rel = (pg.get("properties") or {}).get(HOLDING_DASHBOARD_REL_PROP)
-    current = []
-    if rel and rel.get("type") == "relation":
-        current = rel.get("relation") or []
-        if any(x.get("id") == target_id for x in current):
-            return
-    new_list = current + [{"id": target_id}]
-    notion_request(
-        "PATCH",
-        f"/pages/{holding_page_id}",
-        {"properties": {HOLDING_DASHBOARD_REL_PROP: {"relation": new_list}}},
-    )
-
-
-def sweep_all_holdings_and_fix_dashboard() -> None:
-    target_id = find_moneybag_page_id()
-    if not target_id:
-        print("[WARN] 未找到 icon=💰 的数据看板页面，跳过 sweep。")
-        return
-    cursor = None
-    fixed = 0
-    total = 0
-    while True:
-        payload = {"page_size": 100}
-        if cursor:
-            payload["start_cursor"] = cursor
-        data = notion_request("POST", f"/databases/{HOLDINGS_DB_ID}/query", payload)
-        for pg in data.get("results") or []:
-            total += 1
-            rel = (pg.get("properties") or {}).get(HOLDING_DASHBOARD_REL_PROP)
-            need = True
-            if rel and rel.get("type") == "relation":
-                if any(x.get("id") == target_id for x in (rel.get("relation") or [])):
-                    need = False
-            if need:
-                ensure_holding_dashboard_relation(pg["id"])
-                fixed += 1
-        cursor = data.get("next_cursor")
-        if not data.get("has_more"):
-            break
-    print(f"[SWEEP] 数据看板 Relation 修复：fixed={fixed} / total={total}")
-
 
 # ================ 交易处理：建立/补齐关系与名称（支持--today-only） ================
 def process_new_trades(today_only: bool = False) -> None:
     cursor = None
-    processed = created = linked = named = dashboard_linked = 0
+    processed = created = linked = named = 0
 
     while True:
         payload = {"page_size": 50}
@@ -485,12 +363,6 @@ def process_new_trades(today_only: bool = False) -> None:
             set_trade_name(trade_id, fetched_name)
             named += 1
 
-            try:
-                ensure_holding_dashboard_relation(holding_id)
-                dashboard_linked += 1
-            except Exception as exc:
-                print(f"[WARN] dashboard relation skip: {exc}")
-
             print(
                 f"[OK] trade {trade_id} -> holding {holding_id} "
                 f"(code={code6}, name={fetched_name})"
@@ -502,8 +374,8 @@ def process_new_trades(today_only: bool = False) -> None:
 
     print(
         "TRADES Done. processed={p}, created_holdings={c}, "
-        "linked={l}, named={n}, dashboard_linked={d}".format(
-            p=processed, c=created, l=linked, n=named, d=dashboard_linked
+        "linked={l}, named={n}".format(
+            p=processed, c=created, l=linked, n=named
         )
     )
 
@@ -655,7 +527,6 @@ def main() -> None:
             print("[WARN] 未设置 TRADES_DB_ID，跳过交易处理（link）")
         else:
             process_new_trades(today_only=today_only)
-            sweep_all_holdings_and_fix_dashboard()
     if mode in ("market", "all"):
         update_holdings_market()
     if mode in ("position", "all"):
