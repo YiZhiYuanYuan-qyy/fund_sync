@@ -386,12 +386,13 @@ def build_market_props(code: str, name: str, info: dict) -> dict:
 
 def update_holdings_market():
     pages = list_holdings_pages()
-    total=ok=fail=0
+    total = ok = fail = 0
     for pg in pages:
         props = pg.get("properties") or {}
         code_raw = get_prop_text(props.get(FIELD["code"])) or get_prop_text(props.get(FIELD["title"]))
         code6 = zpad6(code_raw)
-        if not code6: continue
+        if not code6:
+            continue
         total += 1
 
         info = fetch_fundgz(code6)
@@ -402,7 +403,7 @@ def update_holdings_market():
                         "gsz": em.get("dwjz"), "gszzl": em.get("gszzl"),
                         "gztime": em.get("gztime"), "source": em.get("source")}
         if not (info.get("dwjz") or info.get("gszzl")):
-            info = {"source":"失败"}
+            info = {"source": "失败"}
 
         name_existing = get_prop_text(props.get(FIELD["title"]))
         name = (info.get("name") or name_existing or code6).strip()
@@ -411,12 +412,15 @@ def update_holdings_market():
             print(f"[MARKET] {code6} {name} ｜source={info.get('source')} ｜chg={info.get('gszzl')}")
             ok += 1
         except Exception as e:
-            print(f"[ERR] MARKET {code6}: {e}"); fail += 1
+            print(f"[ERR] MARKET {code6}: {e}")
+            fail += 1
     print(f"MARKET Done. updated={ok}, failed={fail}, total={total}")
+
 
 # ================ 仓位计算（基于持仓成本） ================
 def prop_number_value(p: dict):
-    if not p: return None
+    if not p:
+        return None
     t = p.get("type")
     if t == "number":
         return p.get("number")
@@ -442,7 +446,8 @@ def update_positions_by_cost():
     total_cost = sum(v for _, v in costs)
     print(f"[POSITION] total_cost={total_cost}")
     if total_cost <= 0:
-        print("[POSITION] 总持仓成本<=0，跳过仓位写入。"); return
+        print("[POSITION] 总持仓成本<=0，跳过仓位写入。")
+        return
 
     # 2) 写回仓位（0~1）
     updated = 0
@@ -450,12 +455,13 @@ def update_positions_by_cost():
         position = c / total_cost
         try:
             notion_request("PATCH", f"/pages/{page_id}", {
-                "properties": { WEIGHT_FIELD: { "number": position } }
+                "properties": {WEIGHT_FIELD: {"number": position}}
             })
             updated += 1
         except Exception as e:
             print(f"[ERR] POSITION {page_id}: {e}")
     print(f"[POSITION] updated={updated}/{len(costs)}")
+
 
 # ================== main：link / market / position / all ==================
 def main():
@@ -477,6 +483,7 @@ def main():
         update_holdings_market()
     if mode in ("position", "all"):
         update_positions_by_cost()
+
 
 if __name__ == "__main__":
     main()
