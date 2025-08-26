@@ -1,10 +1,11 @@
 {
   "version": 2,
-  "functions": {
-    "api/trigger-pipeline.js": {
-      "runtime": "nodejs@18.x"
+  "builds": [
+    {
+      "src": "api/trigger-pipeline.js",
+      "use": "@vercel/node"
     }
-  },
+  ],
   "routes": [
     {
       "src": "/api/trigger-pipeline",
