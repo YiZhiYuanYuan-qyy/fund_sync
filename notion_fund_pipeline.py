@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os, re, time, json, requests, sys
-from typing import Optional, List, Tuple
+import os
+import re
+import time
+import json
+import requests
+import sys
+from typing import Optional
 from datetime import datetime, timezone, timedelta
 
 # ================== 环境变量 ==================
@@ -31,7 +36,7 @@ FIELD = {
     "gszzl": "估算涨跌幅",
     "gztime": "估值时间",
     "source": "来源",
-    "updated":"更新于",
+    "updated": "更新于",
 }
 # 仓位计算字段（持仓表）
 COST_FIELD = "持仓成本"    # Number / Formula / Rollup(number)
@@ -53,7 +58,7 @@ UA_HEADERS = {
 
 FUNDGZ_HTTP = "http://fundgz.1234567.com.cn/js/{code}.js"
 FUNDGZ_HTTPS = "https://fundgz.1234567.com.cn/js/{code}.js"
-EM_F10_API   = "https://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=1&startDate=&endDate="
+EM_F10_API = "https://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pageSize=1&startDate=&endDate="
 
 # ================ 工具函数 ================
 SG_TZ = timezone(timedelta(hours=8))  # Asia/Singapore
@@ -61,9 +66,11 @@ SG_TZ = timezone(timedelta(hours=8))  # Asia/Singapore
 def today_iso_date() -> str:
     return datetime.now(SG_TZ).date().isoformat()
 
+
 def zpad6(s: str) -> str:
     t = "".join(ch for ch in str(s or "").strip() if ch.isdigit())
     return t.zfill(6) if t else ""
+
 
 def notion_request(method: str, path: str, payload=None):
     url = f"https://api.notion.com/v1{path}"
@@ -75,7 +82,8 @@ def notion_request(method: str, path: str, payload=None):
     return r.json()
 
 def get_prop_text(prop) -> str:
-    if not prop: return ""
+    if not prop:
+        return ""
     t = prop.get("type")
     if t == "rich_text":
         arr = prop.get("rich_text") or []
@@ -84,12 +92,15 @@ def get_prop_text(prop) -> str:
         arr = prop.get("title") or []
         return "".join([(x.get("plain_text") or "") for x in arr]).strip()
     if t == "number":
-        v = prop.get("number"); return "" if v is None else str(v)
+        v = prop.get("number")
+        return "" if v is None else str(v)
     return ""
 
 def has_relation(prop) -> bool:
-    if not prop: return False
-    if prop.get("type") != "relation": return False
+    if not prop:
+        return False
+    if prop.get("type") != "relation":
+        return False
     arr = prop.get("relation") or []
     return len(arr) > 0
 
@@ -119,12 +130,15 @@ def fetch_fund_name_from_fundgz(code6: str) -> Optional[str]:
         try:
             raw = http_get_utf8(base.format(code=code6) + f"?rt={int(time.time())}")
             m = re.search(r'\{.*\}', raw, flags=re.S)
-            if not m: continue
+            if not m:
+                continue
             js = m.group(0)
             mm = re.search(r'"name"\s*:\s*"([^"]+)"', js)
-            if mm: return mm.group(1).strip()
+            if mm:
+                return mm.group(1).strip()
         except Exception:
-            time.sleep(0.2); continue
+            time.sleep(0.2)
+            continue
     return None
 
 def fetch_fundgz(code6: str, timeout: float = 8.0) -> dict:
@@ -137,15 +151,17 @@ def fetch_fundgz(code6: str, timeout: float = 8.0) -> dict:
             def jget(k):
                 mm = re.search(rf'"{k}"\s*:\s*"([^"]*)"', js)
                 return mm.group(1) if mm else ""
-            name  = jget("name")
-            dwjz  = jget("dwjz")
-            gsz   = jget("gsz")
+            name = jget("name")
+            dwjz = jget("dwjz")
+            gsz = jget("gsz")
             gszzl = normalize_num_str(jget("gszzl"))
-            gz    = jget("gztime")
-            if gz and not is_iso_like(gz): gz = ""
+            gz = jget("gztime")
+            if gz and not is_iso_like(gz):
+                gz = ""
             return {"name": name, "dwjz": dwjz, "gsz": gsz, "gszzl": gszzl, "gztime": gz, "source": "天天基金"}
         except Exception:
-            time.sleep(0.3); continue
+            time.sleep(0.3)
+            continue
     return {}
 
 # ================ 东方财富 F10（兜底） ================
@@ -156,7 +172,8 @@ def fetch_em_last_nav_and_chg(code6: str, timeout: float = 8.0) -> dict:
         r.raise_for_status()
         js = r.json()
         rows = (js.get("Data") or {}).get("LSJZList") or []
-        if not rows: return {}
+        if not rows:
+            return {}
         row = rows[0]
         return {
             "dwjz": row.get("DWJZ"),
@@ -177,7 +194,7 @@ def find_holding_by_code(code6: str) -> Optional[str]:
 def create_holding(code6: str, name: str) -> str:
     props = {
         HOLDING_TITLE_PROP: {"title": [{"text": {"content": name or code6}}]},
-        HOLDING_CODE_PROP:  {"rich_text": [{"text": {"content": code6}}]},
+        HOLDING_CODE_PROP: {"rich_text": [{"text": {"content": code6}}]},
     }
     data = notion_request("POST", "/pages", {
         "parent": {"database_id": HOLDINGS_DB_ID},
@@ -189,34 +206,37 @@ def get_holding_title(holding_page_id: str) -> str:
     props = get_page_properties(holding_page_id).get("properties") or {}
     return get_prop_text(props.get(HOLDING_TITLE_PROP)) or ""
 
-def update_holding_title_if_needed(holding_page_id: str, code6: str, fetched_name: Optional[str]=None):
+def update_holding_title_if_needed(holding_page_id: str, code6: str, fetched_name: Optional[str] = None):
     cur = get_holding_title(holding_page_id)
     need = (not cur) or (cur.isdigit()) or (cur == code6)
-    if not need: return
+    if not need:
+        return
     name = fetched_name or fetch_fund_name_from_fundgz(code6) or code6
     notion_request("PATCH", f"/pages/{holding_page_id}", {
-        "properties": { HOLDING_TITLE_PROP: { "title": [{"text": {"content": name}}] } }
+        "properties": {HOLDING_TITLE_PROP: {"title": [{"text": {"content": name}}]}}
     })
 
 # ================ 交易：Relation / 名称写入 ================
 def set_trade_relation(trade_page_id: str, holding_page_id: str):
     notion_request("PATCH", f"/pages/{trade_page_id}", {
-        "properties": { TRADE_RELATION_PROP: { "relation": [{"id": holding_page_id}] } }
+        "properties": {TRADE_RELATION_PROP: {"relation": [{"id": holding_page_id}]}}
     })
 
 def set_trade_name(trade_page_id: str, name: str):
-    if not name: return
+    if not name:
+        return
     pg = get_page_properties(trade_page_id)
     p = (pg.get("properties") or {}).get(TRADE_NAME_PROP)
-    if not p: return
+    if not p:
+        return
     t = p.get("type")
     if t == "title":
-        payload = { TRADE_NAME_PROP: { "title": [{"text": {"content": name}}] } }
+        payload = {TRADE_NAME_PROP: {"title": [{"text": {"content": name}}]}}
     elif t == "rich_text":
-        payload = { TRADE_NAME_PROP: { "rich_text": [{"text": {"content": name}}] } }
+        payload = {TRADE_NAME_PROP: {"rich_text": [{"text": {"content": name}}]}}
     else:
         return
-    notion_request("PATCH", f"/pages/{trade_page_id}", { "properties": payload })
+    notion_request("PATCH", f"/pages/{trade_page_id}", {"properties": payload})
 
 # ================ 数据看板 Relation（icon=💰） ================
 _dashboard_db_id_cache = None
@@ -224,8 +244,10 @@ _moneybag_page_id_cache = None
 
 def get_dashboard_db_id() -> Optional[str]:
     global _dashboard_db_id_cache
-    if DASHBOARD_DB_ID: return DASHBOARD_DB_ID
-    if _dashboard_db_id_cache: return _dashboard_db_id_cache
+    if DASHBOARD_DB_ID:
+        return DASHBOARD_DB_ID
+    if _dashboard_db_id_cache:
+        return _dashboard_db_id_cache
     db = notion_request("GET", f"/databases/{HOLDINGS_DB_ID}")
     p = (db.get("properties") or {}).get(HOLDING_DASHBOARD_REL_PROP)
     if p and p.get("type") == "relation":
@@ -241,35 +263,43 @@ def _scan_pick_moneybag(pages):
         props = pg.get("properties", {})
         title_prop = next((props[k] for k, v in props.items() if v.get("type") == "title"), None)
         name = get_prop_text(title_prop)
-        if "💰" in name: return pg["id"]
+        if "💰" in name:
+            return pg["id"]
     for pg in pages:
         props = pg.get("properties", {})
         title_prop = next((props[k] for k, v in props.items() if v.get("type") == "title"), None)
         name = get_prop_text(title_prop)
-        if "数据看板" in name: return pg["id"]
+        if "数据看板" in name:
+            return pg["id"]
     return None
 
 def find_moneybag_page_id() -> Optional[str]:
     global _moneybag_page_id_cache
-    if _moneybag_page_id_cache: return _moneybag_page_id_cache
+    if _moneybag_page_id_cache:
+        return _moneybag_page_id_cache
     dbid = get_dashboard_db_id()
-    if not dbid: return None
+    if not dbid:
+        return None
     cursor = None
     pages = []
     while True:
         payload = {"page_size": 100}
-        if cursor: payload["start_cursor"] = cursor
+        if cursor:
+            payload["start_cursor"] = cursor
         data = notion_request("POST", f"/databases/{dbid}/query", payload)
         pages.extend(data.get("results") or [])
         cursor = data.get("next_cursor")
-        if not data.get("has_more"): break
+        if not data.get("has_more"):
+            break
     target = _scan_pick_moneybag(pages)
-    if target: _moneybag_page_id_cache = target
+    if target:
+        _moneybag_page_id_cache = target
     return _moneybag_page_id_cache
 
 def ensure_holding_dashboard_relation(holding_page_id: str):
     target_id = find_moneybag_page_id()
-    if not target_id: return
+    if not target_id:
+        return
     pg = get_page_properties(holding_page_id)
     rel = (pg.get("properties") or {}).get(HOLDING_DASHBOARD_REL_PROP)
     current = []
@@ -279,17 +309,21 @@ def ensure_holding_dashboard_relation(holding_page_id: str):
             return
     new_list = current + [{"id": target_id}]
     notion_request("PATCH", f"/pages/{holding_page_id}", {
-        "properties": { HOLDING_DASHBOARD_REL_PROP: { "relation": new_list } }
+        "properties": {HOLDING_DASHBOARD_REL_PROP: {"relation": new_list}}
     })
 
 def sweep_all_holdings_and_fix_dashboard():
     target_id = find_moneybag_page_id()
     if not target_id:
-        print("[WARN] 未找到 icon=💰 的数据看板页面，跳过 sweep。"); return
-    cursor = None; fixed = 0; total = 0
+        print("[WARN] 未找到 icon=💰 的数据看板页面，跳过 sweep。")
+        return
+    cursor = None
+    fixed = 0
+    total = 0
     while True:
         payload = {"page_size": 100}
-        if cursor: payload["start_cursor"] = cursor
+        if cursor:
+            payload["start_cursor"] = cursor
         data = notion_request("POST", f"/databases/{HOLDINGS_DB_ID}/query", payload)
         for pg in data.get("results") or []:
             total += 1
@@ -299,9 +333,11 @@ def sweep_all_holdings_and_fix_dashboard():
                 if any(x.get("id") == target_id for x in (rel.get("relation") or [])):
                     need = False
             if need:
-                ensure_holding_dashboard_relation(pg["id"]); fixed += 1
+                ensure_holding_dashboard_relation(pg["id"])
+                fixed += 1
         cursor = data.get("next_cursor")
-        if not data.get("has_more"): break
+        if not data.get("has_more"):
+            break
     print(f"[SWEEP] 数据看板 Relation 修复：fixed={fixed} / total={total}")
 
 # ================ 交易处理：建立/补齐关系与名称（支持--today-only） ================
