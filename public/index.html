@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金同步管道触发器</title>
+    <title>基金同步管道</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -18,59 +18,56 @@
             background: #f8f9fa;
             border: 1px solid #e9ecef;
             border-radius: 12px;
-            padding: 20px;
+            padding: 25px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            max-width: 500px;
+            max-width: 600px;
             margin: 0 auto;
         }
-        .form-group {
-            margin-bottom: 18px;
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
         }
-        label {
-            display: block;
-            margin-bottom: 6px;
+        .mode-button {
+            padding: 15px 10px;
+            background: #fff3cd;
+            color: #fd7e14;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            font-size: 14px;
             font-weight: 600;
-            font-size: 14px;
-            color: #495057;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
         }
-        select, input[type="checkbox"] {
-            width: 100%;
-            padding: 8px 10px;
-            border: 1px solid #ced4da;
-            border-radius: 6px;
-            background: #ffffff;
-            color: #333;
-            font-size: 14px;
+        .mode-button:hover {
+            background: #ffeaa7;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        .mode-button:active {
+            transform: translateY(0);
         }
         .checkbox-group {
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
+            margin-top: 15px;
         }
         .checkbox-group input[type="checkbox"] {
             width: auto;
+            margin: 0;
         }
-        button {
-            width: 100%;
-            padding: 10px 15px;
-            background: #fff3cd;
-            color: #fd7e14;
-            border: 1px solid #ffeaa7;
-            border-radius: 6px;
+        .checkbox-group label {
+            margin: 0;
             font-size: 14px;
-            font-weight: 600;
+            color: #495057;
             cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        button:hover {
-            background: #ffeaa7;
-        }
-        button:disabled {
-            background: #6c757d;
-            cursor: not-allowed;
         }
         .status {
-            margin-top: 18px;
+            margin-top: 20px;
             padding: 12px;
             border-radius: 6px;
             text-align: center;
@@ -96,114 +93,94 @@
 </head>
 <body>
     <div class="container">
-        <form id="triggerForm">
-            <div class="form-group">
-                <label for="mode">运行模式:</label>
-                <select id="mode" name="mode">
-                    <option value="all">全部 (all)</option>
-                    <option value="link">链接同步 (link)</option>
-                    <option value="market">市场数据 (market)</option>
-                    <option value="position">持仓更新 (position)</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <div class="checkbox-group">
-                    <input type="checkbox" id="todayOnly" name="todayOnly">
-                    <label for="todayOnly">仅处理今日交易</label>
-                </div>
-            </div>
-            
-            <button type="submit" id="submitBtn">🚀 触发同步</button>
-        </form>
+        <div class="button-grid">
+            <button class="mode-button" data-mode="all">全部模式</button>
+            <button class="mode-button" data-mode="link">链接同步</button>
+            <button class="mode-button" data-mode="market">市场数据</button>
+            <button class="mode-button" data-mode="position">持仓更新</button>
+        </div>
+        
+        <div class="checkbox-group">
+            <input type="checkbox" id="todayOnly" name="todayOnly">
+            <label for="todayOnly">仅处理今日交易</label>
+        </div>
         
         <div id="status" style="display: none;"></div>
     </div>
 
     <script>
-        document.getElementById('triggerForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const submitBtn = document.getElementById('submitBtn');
-            const statusDiv = document.getElementById('status');
-            
-            // 获取表单数据
-            const mode = document.getElementById('mode').value;
-            const todayOnly = document.getElementById('todayOnly').checked;
-            
-            // 显示加载状态
-            submitBtn.disabled = true;
-            submitBtn.textContent = '⏳ 触发中...';
-            statusDiv.style.display = 'block';
-            statusDiv.className = 'status loading';
-            statusDiv.textContent = '正在触发 GitHub Actions...';
-            
-            try {
-                // 本地测试模式 - 模拟 API 响应
-                const isLocalTest = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        document.querySelectorAll('.mode-button').forEach(button => {
+            button.addEventListener('click', async () => {
+                const mode = button.dataset.mode;
+                const todayOnly = document.getElementById('todayOnly').checked;
                 
-                if (isLocalTest) {
-                    // 模拟成功响应
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // 模拟网络延迟
-                    const result = {
-                        success: true,
-                        message: 'Pipeline triggered successfully (Local Test Mode)',
-                        mode: mode,
-                        today_only: todayOnly,
-                        timestamp: new Date().toISOString()
-                    };
+                // 显示加载状态
+                const statusDiv = document.getElementById('status');
+                statusDiv.style.display = 'block';
+                statusDiv.className = 'status loading';
+                statusDiv.textContent = `正在触发 ${mode} 模式...`;
+                
+                // 禁用所有按钮
+                document.querySelectorAll('.mode-button').forEach(btn => btn.disabled = true);
+                
+                try {
+                    // 本地测试模式
+                    const isLocalTest = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
                     
-                    statusDiv.className = 'status success';
-                    statusDiv.innerHTML = `
-                        ✅ 触发成功！(本地测试模式)<br>
-                        模式: ${mode}<br>
-                        仅今日: ${todayOnly ? '是' : '否'}<br>
-                        时间: ${new Date().toLocaleString('zh-CN')}<br>
-                        <small>注意：这是本地测试，实际未触发 GitHub Actions</small>
-                    `;
-                    return;
-                }
-                
-                // 生产环境 - 真实 API 调用
-                const response = await fetch('/api/trigger-pipeline', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        mode: mode,
-                        today_only: todayOnly
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    statusDiv.className = 'status success';
-                    statusDiv.innerHTML = `
-                        ✅ 触发成功！<br>
-                        模式: ${mode}<br>
-                        仅今日: ${todayOnly ? '是' : '否'}<br>
-                        时间: ${new Date().toLocaleString('zh-CN')}
-                    `;
-                } else {
+                    if (isLocalTest) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        statusDiv.className = 'status success';
+                        statusDiv.innerHTML = `
+                            ✅ 触发成功！(本地测试模式)<br>
+                            模式: ${mode}<br>
+                            仅今日: ${todayOnly ? '是' : '否'}<br>
+                            时间: ${new Date().toLocaleString('zh-CN')}<br>
+                            <small>注意：这是本地测试，实际未触发 GitHub Actions</small>
+                        `;
+                        return;
+                    }
+                    
+                    // 生产环境
+                    const response = await fetch('/api/trigger-pipeline', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            mode: mode,
+                            today_only: todayOnly
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        statusDiv.className = 'status success';
+                        statusDiv.innerHTML = `
+                            ✅ 触发成功！<br>
+                            模式: ${mode}<br>
+                            仅今日: ${todayOnly ? '是' : '否'}<br>
+                            时间: ${new Date().toLocaleString('zh-CN')}
+                        `;
+                    } else {
+                        statusDiv.className = 'status error';
+                        statusDiv.innerHTML = `
+                            ❌ 触发失败<br>
+                            错误: ${result.error}<br>
+                            详情: ${result.details || '无'}
+                        `;
+                    }
+                } catch (error) {
                     statusDiv.className = 'status error';
                     statusDiv.innerHTML = `
-                        ❌ 触发失败<br>
-                        错误: ${result.error}<br>
-                        详情: ${result.details || '无'}
+                        ❌ 网络错误<br>
+                        错误: ${error.message}
                     `;
+                } finally {
+                    // 重新启用所有按钮
+                    document.querySelectorAll('.mode-button').forEach(btn => btn.disabled = false);
                 }
-            } catch (error) {
-                statusDiv.className = 'status error';
-                statusDiv.innerHTML = `
-                    ❌ 网络错误<br>
-                    错误: ${error.message}
-                `;
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = '🚀 触发同步';
-            }
+            });
         });
     </script>
 </body>
