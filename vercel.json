@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "functions": {
+    "api/trigger-pipeline.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/trigger-pipeline",
+      "dest": "/api/trigger-pipeline.js"
+    }
+  ]
+}
