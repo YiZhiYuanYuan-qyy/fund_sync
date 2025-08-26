@@ -18,33 +18,33 @@
             background: #f8f9fa;
             border: 1px solid #e9ecef;
             border-radius: 12px;
-            padding: 14px;
+            padding: 12px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            max-width: 500px;
-            min-width: 320px;
+            width: 100%;
+            max-width: 600px;
             margin: 0 auto;
             box-sizing: border-box;
         }
         .button-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
+            display: flex;
+            gap: 8px;
             margin-bottom: 10px;
             width: 100%;
+            overflow-x: hidden;
         }
         .mode-button {
-            padding: 12px 8px;
+            padding: 8px 4px;
             background: #fff3cd;
             color: #fd7e14;
             border: 1px solid #ffeaa7;
             border-radius: 6px;
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
             text-align: center;
-            width: 100%;
-            min-height: 44px;
+            flex: 1;
+            min-height: 40px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -99,33 +99,33 @@
         }
         
         /* 响应式设计 */
-        @media (max-width: 480px) {
+        @media (max-width: 600px) {
             .container {
-                margin: 10px;
-                padding: 12px;
-            }
-            .button-grid {
-                gap: 8px;
-            }
-            .mode-button {
-                padding: 10px 6px;
-                font-size: 13px;
-                min-height: 40px;
-            }
-        }
-        
-        @media (max-width: 360px) {
-            .container {
-                margin: 5px;
+                margin: 8px;
                 padding: 10px;
             }
             .button-grid {
                 gap: 6px;
             }
             .mode-button {
-                padding: 8px 4px;
-                font-size: 12px;
+                padding: 6px 2px;
+                font-size: 11px;
                 min-height: 36px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                margin: 5px;
+                padding: 8px;
+            }
+            .button-grid {
+                gap: 4px;
+            }
+            .mode-button {
+                padding: 5px 1px;
+                font-size: 10px;
+                min-height: 32px;
             }
         }
     </style>
