@@ -667,11 +667,11 @@ def main() -> None:
         update_holdings_market()
     if mode in ("position", "all"):
         update_positions_by_cost()
-    if mode in ("fee", "all"):
-        if not TRADES_DB_ID:
-            print("[WARN] 未设置 TRADES_DB_ID，跳过费率计算（fee）")
-        else:
-            update_all_trades_estimated_fees()
+    # 所有模式都包含费率计算
+    if TRADES_DB_ID:
+        update_all_trades_estimated_fees()
+    else:
+        print("[WARN] 未设置 TRADES_DB_ID，跳过费率计算")
 
 
 if __name__ == "__main__":
