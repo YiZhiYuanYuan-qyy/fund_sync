@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'which step to run: link / market / position / all'
+        description: 'which step to run: link / market / position / fee / all'
         required: true
         default: 'all'
       today_only:

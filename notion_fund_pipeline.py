@@ -34,6 +34,10 @@ TRADES_DB_ID = os.getenv("TRADES_DB_ID", "").strip()
 TRADE_CODE_PROP = "Code"
 TRADE_NAME_PROP = "基金名称"             # title 或 rich_text
 TRADE_RELATION_PROP = "Fund 持仓"        # Relation → 持仓表
+TRADE_HOLDING_DAYS_PROP = "持仓时间"     # Formula (number)
+TRADE_ESTIMATED_FEE_PROP = "预估卖出费率" # Number
+TRADE_QUANTITY_PROP = "持仓份额"         # Number
+TRADE_ESTIMATED_NAV_PROP = "估算净值"    # Number (从持仓表获取)
 
 # 持仓表
 HOLDING_TITLE_PROP = "基金名称"          # Title
@@ -311,6 +315,135 @@ def set_trade_name(trade_page_id: str, name: str) -> None:
 
 
 
+def calculate_sell_fee_rate(holding_days: float) -> float:
+    """根据持仓时间计算卖出费率"""
+    if holding_days < 0:
+        return 0.0
+    elif holding_days < 7:
+        return 0.015  # 1.5%
+    elif holding_days < 30:
+        return 0.005  # 0.5%
+    else:
+        return 0.0    # 0%
+
+
+def get_estimated_nav_from_holding(holding_page_id: str) -> float:
+    """从持仓表获取估算净值"""
+    try:
+        props = get_page_properties(holding_page_id).get("properties") or {}
+        # 优先使用估算净值，如果没有则使用单位净值
+        estimated_nav = prop_number_value(props.get(FIELD["gsz"]))
+        if estimated_nav is None:
+            estimated_nav = prop_number_value(props.get(FIELD["dwjz"]))
+        return estimated_nav or 0.0
+    except Exception:
+        return 0.0
+
+
+def calculate_estimated_sell_fee(trade_page_id: str, holding_page_id: str) -> None:
+    """计算预估卖出费率并更新到交易记录"""
+    try:
+        trade_props = get_page_properties(trade_page_id).get("properties") or {}
+        
+        # 获取持仓时间（Formula 字段）
+        holding_days_prop = trade_props.get(TRADE_HOLDING_DAYS_PROP)
+        if not holding_days_prop or holding_days_prop.get("type") != "formula":
+            print(f"[WARN] 交易 {trade_page_id} 缺少持仓时间字段")
+            return
+            
+        holding_days = prop_number_value(holding_days_prop)
+        if holding_days is None:
+            print(f"[WARN] 交易 {trade_page_id} 持仓时间计算失败")
+            return
+            
+        # 获取持仓份额
+        quantity_prop = trade_props.get(TRADE_QUANTITY_PROP)
+        if not quantity_prop:
+            print(f"[WARN] 交易 {trade_page_id} 缺少持仓份额字段")
+            return
+            
+        quantity = prop_number_value(quantity_prop)
+        if quantity is None or quantity <= 0:
+            print(f"[WARN] 交易 {trade_page_id} 持仓份额无效: {quantity}")
+            return
+            
+        # 获取估算净值
+        estimated_nav = get_estimated_nav_from_holding(holding_page_id)
+        if estimated_nav <= 0:
+            print(f"[WARN] 持仓 {holding_page_id} 估算净值无效: {estimated_nav}")
+            return
+            
+        # 计算卖出费率
+        sell_fee_rate = calculate_sell_fee_rate(holding_days)
+        
+        # 计算预估卖出费率
+        estimated_sell_fee = sell_fee_rate * quantity * estimated_nav
+        
+        # 更新交易记录
+        notion_request(
+            "PATCH",
+            f"/pages/{trade_page_id}",
+            {"properties": {TRADE_ESTIMATED_FEE_PROP: {"number": estimated_sell_fee}}}
+        )
+        
+        print(f"[FEE] 交易 {trade_page_id} 预估卖出费率: {estimated_sell_fee:.2f} "
+              f"(费率:{sell_fee_rate*100:.1f}%, 份额:{quantity}, 净值:{estimated_nav:.4f})")
+              
+    except Exception as exc:
+        print(f"[ERR] 计算预估卖出费率失败 {trade_page_id}: {exc}")
+
+
+def update_all_trades_estimated_fees() -> None:
+    """更新所有交易记录的预估卖出费率"""
+    cursor = None
+    total = updated = failed = 0
+    
+    while True:
+        payload = {"page_size": 50}
+        if cursor:
+            payload["start_cursor"] = cursor
+            
+        # 查找所有有持仓关联的交易记录
+        flt = {
+            "and": [
+                {"property": TRADE_RELATION_PROP, "relation": {"is_not_empty": True}},
+                {"property": TRADE_QUANTITY_PROP, "number": {"greater_than": 0}},
+            ]
+        }
+        payload["filter"] = flt
+        
+        data = notion_request("POST", f"/databases/{TRADES_DB_ID}/query", payload)
+        for pg in data.get("results") or []:
+            total += 1
+            trade_id = pg["id"]
+            props = pg.get("properties") or {}
+            
+            # 获取持仓关联
+            relation_prop = props.get(TRADE_RELATION_PROP)
+            if not relation_prop or relation_prop.get("type") != "relation":
+                continue
+                
+            relations = relation_prop.get("relation") or []
+            if not relations:
+                continue
+                
+            holding_id = relations[0]["id"]
+            
+            # 计算预估卖出费率
+            try:
+                calculate_estimated_sell_fee(trade_id, holding_id)
+                updated += 1
+            except Exception as exc:
+                print(f"[ERR] 更新预估卖出费率失败 {trade_id}: {exc}")
+                failed += 1
+                
+        cursor = data.get("next_cursor")
+        if not data.get("has_more"):
+            break
+            
+    print(f"ESTIMATED FEES Done. total={total}, updated={updated}, failed={failed}")
+
+
 # ================ 交易处理：建立/补齐关系与名称（支持--today-only） ================
 def process_new_trades(today_only: bool = False) -> None:
     cursor = None
@@ -362,6 +495,9 @@ def process_new_trades(today_only: bool = False) -> None:
                 )
             set_trade_name(trade_id, fetched_name)
             named += 1
+            
+            # 计算预估卖出费率
+            calculate_estimated_sell_fee(trade_id, holding_id)
 
             print(
                 f"[OK] trade {trade_id} -> holding {holding_id} "
@@ -531,6 +667,11 @@ def main() -> None:
         update_holdings_market()
     if mode in ("position", "all"):
         update_positions_by_cost()
+    if mode in ("fee", "all"):
+        if not TRADES_DB_ID:
+            print("[WARN] 未设置 TRADES_DB_ID，跳过费率计算（fee）")
+        else:
+            update_all_trades_estimated_fees()
 
 
 if __name__ == "__main__":
