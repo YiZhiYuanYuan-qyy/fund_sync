@@ -18,28 +18,30 @@
             background: #f8f9fa;
             border: 1px solid #e9ecef;
             border-radius: 12px;
-            padding: 25px;
+            padding: 20px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            max-width: 600px;
+            max-width: 700px;
             margin: 0 auto;
         }
         .button-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
-            margin-bottom: 20px;
+            display: flex;
+            gap: 12px;
+            margin-bottom: 15px;
+            justify-content: center;
         }
         .mode-button {
-            padding: 15px 10px;
+            padding: 12px 8px;
             background: #fff3cd;
             color: #fd7e14;
             border: 1px solid #ffeaa7;
-            border-radius: 8px;
-            font-size: 14px;
+            border-radius: 6px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
             text-align: center;
+            flex: 1;
+            max-width: 120px;
         }
         .mode-button:hover {
             background: #ffeaa7;
@@ -54,7 +56,7 @@
             align-items: center;
             justify-content: center;
             gap: 8px;
-            margin-top: 15px;
+            margin-top: 12px;
         }
         .checkbox-group input[type="checkbox"] {
             width: auto;
