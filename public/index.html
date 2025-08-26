@@ -195,6 +195,10 @@
                     
                     const result = await response.json();
                     
+                    // 调试信息
+                    console.log('API 响应状态:', response.status);
+                    console.log('API 响应结果:', result);
+                    
                     if (response.ok) {
                         statusDiv.className = 'status success';
                         statusDiv.innerHTML = `
@@ -205,17 +209,39 @@
                         `;
                     } else {
                         statusDiv.className = 'status error';
+                        // 改进错误信息显示
+                        let errorMsg = '未知错误';
+                        let detailsMsg = '无详细信息';
+                        
+                        if (result && typeof result === 'object') {
+                            if (result.error) {
+                                errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+                            }
+                            if (result.details) {
+                                detailsMsg = typeof result.details === 'string' ? result.details : JSON.stringify(result.details);
+                            }
+                            if (result.message) {
+                                errorMsg = result.message;
+                            }
+                        } else if (result) {
+                            errorMsg = String(result);
+                        }
+                        
                         statusDiv.innerHTML = `
                             ❌ 触发失败<br>
-                            错误: ${result.error}<br>
-                            详情: ${result.details || '无'}
+                            状态码: ${response.status}<br>
+                            错误: ${errorMsg}<br>
+                            详情: ${detailsMsg}
                         `;
                     }
                 } catch (error) {
                     statusDiv.className = 'status error';
+                    console.error('网络错误:', error);
                     statusDiv.innerHTML = `
                         ❌ 网络错误<br>
-                        错误: ${error.message}
+                        错误: ${error.message}<br>
+                        类型: ${error.name}<br>
+                        请检查网络连接和 API 状态
                     `;
                 } finally {
                     // 重新启用所有按钮
