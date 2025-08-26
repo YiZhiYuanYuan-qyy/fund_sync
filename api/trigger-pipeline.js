@@ -46,6 +46,35 @@ export default async function handler(req, res) {
 
     console.log(`Successfully triggered pipeline with mode: ${mode}, today_only: ${today_only}`);
     
+    // 触发 fund-daily-view 的收益计算
+    try {
+      const dailyViewResponse = await fetch(
+        `https://api.github.com/repos/YiZhiYuanYuan-qyy/fund_daily_view/actions/workflows/run-daily-view.yml/dispatches`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `token ${process.env.GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'Vercel-Trigger-Pipeline'
+          },
+          body: JSON.stringify({
+            ref: 'main',
+            inputs: {
+              mode: 'profit'
+            }
+          })
+        }
+      );
+      
+      if (dailyViewResponse.ok) {
+        console.log('Successfully triggered fund-daily-view calculation');
+      } else {
+        console.log('Failed to trigger fund-daily-view calculation:', dailyViewResponse.status);
+      }
+    } catch (error) {
+      console.log('Error triggering fund-daily-view calculation:', error.message);
+    }
+    
     return res.status(200).json({
       success: true,
       message: 'Pipeline triggered successfully',
