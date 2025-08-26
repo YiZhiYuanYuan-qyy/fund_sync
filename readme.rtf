@@ -1,0 +1,30 @@
+{\rtf1\ansi\ansicpg936\cocoartf2821
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 pip install requests\
+\
+# \uc0\u24517 \u22635 \
+export NOTION_TOKEN="\uc0\u20320 \u30340 token"\
+export HOLDINGS_DB_ID="\uc0\u20320 \u30340  \u25345 \u20179 \u34920 ID"\
+# \uc0\u21487 \u36873 \u65306 \'93\u20132 \u26131 \u27969 \u27700 \u34920 ID\'94\u65288 \u21551 \u29992 \u20132 \u26131 \u8594 \u25345 \u20179 \u33258 \u21160 \u20851 \u32852 \u65289 \
+export TRADES_DB_ID="\uc0\u20320 \u30340  \u20132 \u26131 \u27969 \u27700 \u34920 ID"\
+# \uc0\u21487 \u36873 \u65306 \u25351 \u23450 \'93\u25968 \u25454 \u30475 \u26495 \'94\u24211 ID\u65288 \u21542 \u21017 \u33258 \u21160 \u20174 \u25345 \u20179 \u34920 schema\u35299 \u26512 \u65289 \
+export DASHBOARD_DB_ID="\uc0\u20320 \u30340  \u25968 \u25454 \u30475 \u26495 \u24211 ID"\
+\
+# \uc0\u36305 \u20840 \u27969 \u31243 \u65306 \u20132 \u26131 \u8594 \u25968 \u25454 \u30475 \u26495 \u34917 \u40784 \u8594 \u34892 \u24773 \u8594 \u20179 \u20301 \
+python3 notion_fund_pipeline.py\
+\
+# \uc0\u21482 \u36305 \u20132 \u26131 \u20851 \u32852 \u65288 \u25903 \u25345 \u20165 \u22788 \u29702 \u20170 \u22825 \u65289 \
+python3 notion_fund_pipeline.py link --today-only\
+# \uc0\u25110 \
+python3 notion_fund_pipeline.py link -t\
+\
+# \uc0\u21482 \u26356 \u26032 \u34892 \u24773 \
+python3 notion_fund_pipeline.py market\
+\
+# \uc0\u21482 \u35745 \u31639 \u20179 \u20301 \
+python3 notion_fund_pipeline.py position}

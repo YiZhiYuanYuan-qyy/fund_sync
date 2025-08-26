@@ -1,0 +1,43 @@
+name: Run Notion Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'which step to run: link / market / position / all'
+        required: true
+        default: 'all'
+      today_only:
+        description: 'only process trades created today (true/false)'
+        required: false
+        default: 'false'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install requests
+
+      - name: Run pipeline
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          HOLDINGS_DB_ID: ${{ secrets.HOLDINGS_DB_ID }}
+          TRADES_DB_ID: ${{ secrets.TRADES_DB_ID }}
+          DASHBOARD_DB_ID: ${{ secrets.DASHBOARD_DB_ID }} # 可选
+        run: |
+          MODE=${{ github.event.inputs.mode }}
+          TODAY_ONLY=${{ github.event.inputs.today_only }}
+          if [ "$TODAY_ONLY" = "true" ]; then
+            python3 notion_fund_pipeline.py "$MODE" --today-only
+          else
+            python3 notion_fund_pipeline.py "$MODE"
+          fi

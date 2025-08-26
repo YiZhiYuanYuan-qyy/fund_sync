@@ -1,0 +1,38 @@
+name: 代码测试
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置 Python 环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: 语法检查
+      run: |
+        python -m py_compile notion_fund_pipeline.py
+        
+    - name: 代码风格检查
+      run: |
+        pip install flake8
+        flake8 notion_fund_pipeline.py --max-line-length=120 --ignore=E501,W503
+        
+    - name: 导入测试
+      run: |
+        python -c "import notion_fund_pipeline; print('导入成功')"
