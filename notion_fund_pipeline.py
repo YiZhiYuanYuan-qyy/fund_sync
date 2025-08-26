@@ -6,35 +6,35 @@ from typing import Optional, List, Tuple
 from datetime import datetime, timezone, timedelta
 
 # ================== 环境变量 ==================
-NOTION_TOKEN     = os.getenv("NOTION_TOKEN", "").strip()
-HOLDINGS_DB_ID   = (os.getenv("HOLDINGS_DB_ID") or os.getenv("NOTION_DATABASE_ID") or "").strip()
-TRADES_DB_ID     = os.getenv("TRADES_DB_ID", "").strip()
-DASHBOARD_DB_ID  = os.getenv("DASHBOARD_DB_ID", "").strip()   # 可选：数据看板库ID（否则自动解析）
+NOTION_TOKEN = os.getenv("NOTION_TOKEN", "").strip()
+HOLDINGS_DB_ID = (os.getenv("HOLDINGS_DB_ID") or os.getenv("NOTION_DATABASE_ID") or "").strip()
+TRADES_DB_ID = os.getenv("TRADES_DB_ID", "").strip()
+DASHBOARD_DB_ID = os.getenv("DASHBOARD_DB_ID", "").strip()   # 可选：数据看板库ID（否则自动解析）
 
 # ============== 字段名（按你库实际改） ==============
 # 交易流水表
-TRADE_CODE_PROP      = "Code"
-TRADE_NAME_PROP      = "基金名称"           # title 或 rich_text
-TRADE_RELATION_PROP  = "Fund 持仓"          # Relation → 持仓表
+TRADE_CODE_PROP = "Code"
+TRADE_NAME_PROP = "基金名称"           # title 或 rich_text
+TRADE_RELATION_PROP = "Fund 持仓"          # Relation → 持仓表
 
 # 持仓表
-HOLDING_TITLE_PROP   = "基金名称"           # Title
-HOLDING_CODE_PROP    = "Code"              # Rich text
+HOLDING_TITLE_PROP = "基金名称"           # Title
+HOLDING_CODE_PROP = "Code"              # Rich text
 HOLDING_DASHBOARD_REL_PROP = "数据看板"     # Relation → 数据看板库
 
 # 行情字段（持仓表）
 FIELD = {
-    "title":  HOLDING_TITLE_PROP,
-    "code":   HOLDING_CODE_PROP,
-    "dwjz":   "单位净值",
-    "gsz":    "估算净值",
-    "gszzl":  "估算涨跌幅",
+    "title": HOLDING_TITLE_PROP,
+    "code": HOLDING_CODE_PROP,
+    "dwjz": "单位净值",
+    "gsz": "估算净值",
+    "gszzl": "估算涨跌幅",
     "gztime": "估值时间",
     "source": "来源",
     "updated":"更新于",
 }
 # 仓位计算字段（持仓表）
-COST_FIELD   = "持仓成本"    # Number / Formula / Rollup(number)
+COST_FIELD = "持仓成本"    # Number / Formula / Rollup(number)
 WEIGHT_FIELD = "仓位"        # Number（建议Notion设置为百分比显示）
 
 # ================== Notion / API ==================
@@ -307,10 +307,11 @@ def sweep_all_holdings_and_fix_dashboard():
 # ================ 交易处理：建立/补齐关系与名称（支持--today-only） ================
 def process_new_trades(today_only: bool = False):
     cursor = None
-    processed=created=linked=named=dashboard_linked=0
+    processed = created = linked = named = dashboard_linked = 0
     while True:
         payload = {"page_size": 50}
-        if cursor: payload["start_cursor"] = cursor
+        if cursor:
+            payload["start_cursor"] = cursor
         # 基础过滤：Code 非空 & Relation 为空
         flt = {
             "and": [
@@ -329,55 +330,64 @@ def process_new_trades(today_only: bool = False):
             props = pg.get("properties") or {}
             trade_id = pg["id"]
             code6 = zpad6(get_prop_text(props.get(TRADE_CODE_PROP)))
-            if not code6: continue
+            if not code6:
+                continue
 
             holding_id = find_holding_by_code(code6)
             fetched_name = None
             if not holding_id:
                 fetched_name = fetch_fund_name_from_fundgz(code6) or code6
-                holding_id = create_holding(code6, fetched_name); created += 1
+                holding_id = create_holding(code6, fetched_name)
+                created += 1
 
             update_holding_title_if_needed(holding_id, code6, fetched_name)
-            set_trade_relation(trade_id, holding_id); linked += 1
+            set_trade_relation(trade_id, holding_id)
+            linked += 1
 
             if not fetched_name:
                 fetched_name = get_holding_title(holding_id) or fetch_fund_name_from_fundgz(code6) or code6
-            set_trade_name(trade_id, fetched_name); named += 1
+            set_trade_name(trade_id, fetched_name)
+            named += 1
 
             try:
-                ensure_holding_dashboard_relation(holding_id); dashboard_linked += 1
+                ensure_holding_dashboard_relation(holding_id)
+                dashboard_linked += 1
             except Exception as e:
                 print(f"[WARN] dashboard relation skip: {e}")
 
             print(f"[OK] trade {trade_id} -> holding {holding_id} (code={code6}, name={fetched_name})")
 
         cursor = data.get("next_cursor")
-        if not data.get("has_more"): break
+        if not data.get("has_more"):
+            break
 
     print(f"TRADES Done. processed={processed}, created_holdings={created}, linked={linked}, named={named}, dashboard_linked={dashboard_linked}")
 
 # ================ 行情更新（持仓表） ================
 def list_holdings_pages():
-    pages = []; cursor = None
+    pages = []
+    cursor = None
     while True:
         payload = {"page_size": 100}
-        if cursor: payload["start_cursor"] = cursor
+        if cursor:
+            payload["start_cursor"] = cursor
         data = notion_request("POST", f"/databases/{HOLDINGS_DB_ID}/query", payload)
         pages.extend(data.get("results") or [])
         cursor = data.get("next_cursor")
-        if not data.get("has_more"): break
+        if not data.get("has_more"):
+            break
     return pages
 
 def build_market_props(code: str, name: str, info: dict) -> dict:
     now_iso = datetime.now(SG_TZ).isoformat()
     props = {
-        FIELD["title"]:   {"title":    [{"text": {"content": name or code}}]},
-        FIELD["code"]:    {"rich_text":[{"text": {"content": code}}]},
-        FIELD["dwjz"]:    {"number":   to_float_safe(info.get("dwjz"))},
-        FIELD["gsz"]:     {"number":   to_float_safe(info.get("gsz"))},
-        FIELD["gszzl"]:   {"number":   to_float_safe(info.get("gszzl"))},
-        FIELD["source"]:  {"select":   {"name": info.get("source") or "失败"}},
-        FIELD["updated"]: {"date":     {"start": now_iso}},
+        FIELD["title"]: {"title": [{"text": {"content": name or code}}]},
+        FIELD["code"]: {"rich_text": [{"text": {"content": code}}]},
+        FIELD["dwjz"]: {"number": to_float_safe(info.get("dwjz"))},
+        FIELD["gsz"]: {"number": to_float_safe(info.get("gsz"))},
+        FIELD["gszzl"]: {"number": to_float_safe(info.get("gszzl"))},
+        FIELD["source"]: {"select": {"name": info.get("source") or "失败"}},
+        FIELD["updated"]: {"date": {"start": now_iso}},
     }
     gz = (info.get("gztime") or "").strip()
     if gz and is_iso_like(gz):
@@ -399,9 +409,14 @@ def update_holdings_market():
         if not info or not info.get("gszzl"):
             em = fetch_em_last_nav_and_chg(code6)
             if em:
-                info = {"name": info.get("name") if info else "", "dwjz": em.get("dwjz"),
-                        "gsz": em.get("dwjz"), "gszzl": em.get("gszzl"),
-                        "gztime": em.get("gztime"), "source": em.get("source")}
+                info = {
+                    "name": info.get("name") if info else "",
+                    "dwjz": em.get("dwjz"),
+                    "gsz": em.get("dwjz"),
+                    "gszzl": em.get("gszzl"),
+                    "gztime": em.get("gztime"),
+                    "source": em.get("source")
+                }
         if not (info.get("dwjz") or info.get("gszzl")):
             info = {"source": "失败"}
 
