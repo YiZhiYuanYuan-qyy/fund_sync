@@ -20,28 +20,34 @@
             border-radius: 12px;
             padding: 14px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            max-width: 700px;
+            max-width: 500px;
+            min-width: 320px;
             margin: 0 auto;
+            box-sizing: border-box;
         }
         .button-grid {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
             gap: 12px;
             margin-bottom: 10px;
-            justify-content: center;
+            width: 100%;
         }
         .mode-button {
-            padding: 6px 6px;
+            padding: 12px 8px;
             background: #fff3cd;
             color: #fd7e14;
             border: 1px solid #ffeaa7;
             border-radius: 6px;
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
             text-align: center;
-            flex: 1;
-            max-width: 120px;
+            width: 100%;
+            min-height: 44px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .mode-button:hover {
             background: #ffeaa7;
@@ -90,6 +96,37 @@
             background: #d1ecf1;
             border: 1px solid #bee5eb;
             color: #0c5460;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 480px) {
+            .container {
+                margin: 10px;
+                padding: 12px;
+            }
+            .button-grid {
+                gap: 8px;
+            }
+            .mode-button {
+                padding: 10px 6px;
+                font-size: 13px;
+                min-height: 40px;
+            }
+        }
+        
+        @media (max-width: 360px) {
+            .container {
+                margin: 5px;
+                padding: 10px;
+            }
+            .button-grid {
+                gap: 6px;
+            }
+            .mode-button {
+                padding: 8px 4px;
+                font-size: 12px;
+                min-height: 36px;
+            }
         }
     </style>
 </head>
