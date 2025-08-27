@@ -38,6 +38,8 @@ TRADE_HOLDING_DAYS_PROP = "持仓时间"     # Formula (number)
 TRADE_ESTIMATED_FEE_PROP = "预估卖出费率" # Number
 TRADE_QUANTITY_PROP = "持仓份额"         # Number
 TRADE_ESTIMATED_NAV_PROP = "估算净值"    # Number (从持仓表获取)
+TRADE_AMOUNT_PROP = "交易金额"           # Number
+TRADE_HOLDING_PROFIT_PROP = "持有收益"   # Number
 
 # 持仓表
 HOLDING_TITLE_PROP = "基金名称"          # Title
@@ -393,8 +395,58 @@ def calculate_estimated_sell_fee(trade_page_id: str, holding_page_id: str) -> No
         print(f"[ERR] 计算预估卖出费率失败 {trade_page_id}: {exc}")
 
 
+def calculate_holding_profit(trade_page_id: str, holding_page_id: str) -> None:
+    """计算持有收益并更新到交易记录"""
+    try:
+        trade_props = get_page_properties(trade_page_id).get("properties") or {}
+        
+        # 获取持仓份额
+        quantity_prop = trade_props.get(TRADE_QUANTITY_PROP)
+        if not quantity_prop:
+            print(f"[WARN] 交易 {trade_page_id} 缺少持仓份额字段")
+            return
+            
+        quantity = prop_number_value(quantity_prop)
+        if quantity is None or quantity <= 0:
+            print(f"[WARN] 交易 {trade_page_id} 持仓份额无效: {quantity}")
+            return
+            
+        # 获取交易金额
+        amount_prop = trade_props.get(TRADE_AMOUNT_PROP)
+        if not amount_prop:
+            print(f"[WARN] 交易 {trade_page_id} 缺少交易金额字段")
+            return
+            
+        trade_amount = prop_number_value(amount_prop)
+        if trade_amount is None:
+            print(f"[WARN] 交易 {trade_page_id} 交易金额无效: {trade_amount}")
+            return
+            
+        # 获取估算净值
+        estimated_nav = get_estimated_nav_from_holding(holding_page_id)
+        if estimated_nav <= 0:
+            print(f"[WARN] 持仓 {holding_page_id} 估算净值无效: {estimated_nav}")
+            return
+            
+        # 计算持有收益 = 持仓份额 × 估算净值 - 交易金额
+        holding_profit = (quantity * estimated_nav) - trade_amount
+        
+        # 更新交易记录
+        notion_request(
+            "PATCH",
+            f"/pages/{trade_page_id}",
+            {"properties": {TRADE_HOLDING_PROFIT_PROP: {"number": holding_profit}}}
+        )
+        
+        print(f"[PROFIT] 交易 {trade_page_id} 持有收益: {holding_profit:.2f} "
+              f"(份额:{quantity}, 净值:{estimated_nav:.4f}, 金额:{trade_amount:.2f})")
+              
+    except Exception as exc:
+        print(f"[ERR] 计算持有收益失败 {trade_page_id}: {exc}")
+
+
 def update_all_trades_estimated_fees() -> None:
-    """更新所有交易记录的预估卖出费率"""
+    """更新所有交易记录的预估卖出费率和持有收益"""
     cursor = None
     total = updated = failed = 0
     
@@ -429,19 +481,20 @@ def update_all_trades_estimated_fees() -> None:
                 
             holding_id = relations[0]["id"]
             
-            # 计算预估卖出费率
+            # 计算预估卖出费率和持有收益
             try:
                 calculate_estimated_sell_fee(trade_id, holding_id)
+                calculate_holding_profit(trade_id, holding_id)
                 updated += 1
             except Exception as exc:
-                print(f"[ERR] 更新预估卖出费率失败 {trade_id}: {exc}")
+                print(f"[ERR] 更新交易数据失败 {trade_id}: {exc}")
                 failed += 1
                 
         cursor = data.get("next_cursor")
         if not data.get("has_more"):
             break
             
-    print(f"ESTIMATED FEES Done. total={total}, updated={updated}, failed={failed}")
+    print(f"TRADES UPDATE Done. total={total}, updated={updated}, failed={failed}")
 
 
 # ================ 交易处理：建立/补齐关系与名称（支持--today-only） ================
@@ -496,8 +549,9 @@ def process_new_trades(today_only: bool = False) -> None:
             set_trade_name(trade_id, fetched_name)
             named += 1
             
-            # 计算预估卖出费率
+            # 计算预估卖出费率和持有收益
             calculate_estimated_sell_fee(trade_id, holding_id)
+            calculate_holding_profit(trade_id, holding_id)
 
             print(
                 f"[OK] trade {trade_id} -> holding {holding_id} "
@@ -510,7 +564,7 @@ def process_new_trades(today_only: bool = False) -> None:
 
     print(
         "TRADES Done. processed={p}, created_holdings={c}, "
-        "linked={l}, named={n}".format(
+        "linked={l}, named={n}, fees_and_profits_calculated".format(
             p=processed, c=created, l=linked, n=named
         )
     )
