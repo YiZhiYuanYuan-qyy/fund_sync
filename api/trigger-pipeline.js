@@ -48,19 +48,15 @@ export default async function handler(req, res) {
     
         // 根据模式决定等待策略
     if (mode === 'all' || mode === 'market') {
-        // 需要抓取外部数据的模式：等待 fund-sync 完成
-        console.log('Waiting for fund-sync workflow to complete...');
+        // 需要抓取外部数据的模式：立即返回，避免 Vercel 超时
+        console.log('External data fetching mode, returning immediately to avoid Vercel timeout...');
         
-        // 轮询检查 workflow 状态
-        let attempts = 0;
-        const maxAttempts = 20; // 最多等待10分钟（避免 Vercel 超时）
-        
-        while (attempts < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 30000)); // 等待30秒
-            attempts++;
-            
+        // 异步触发 fund-daily-view（等待足够时间让数据抓取完成）
+        setTimeout(async () => {
             try {
-                // 检查最新的 workflow run 状态
+                console.log('Checking fund-sync workflow status and triggering fund-daily-view...');
+                
+                // 检查 workflow 状态
                 const workflowResponse = await fetch(
                     `https://api.github.com/repos/YiZhiYuanYuan-qyy/fund_sync/actions/workflows/run-notion-pipeline.yml/runs?per_page=1`,
                     {
@@ -108,19 +104,45 @@ export default async function handler(req, res) {
                         } else {
                             console.log('Fund-sync workflow failed, skipping fund-daily-view trigger');
                         }
-                        break;
                     } else {
-                        console.log(`Fund-sync workflow status: ${latestRun?.status}, waiting... (attempt ${attempts}/${maxAttempts})`);
+                        console.log(`Fund-sync workflow still running: ${latestRun?.status}`);
+                        // 如果还在运行，再等一段时间
+                        setTimeout(async () => {
+                            try {
+                                console.log('Retrying fund-daily-view trigger...');
+                                const dailyViewResponse = await fetch(
+                                    `https://api.github.com/repos/YiZhiYuanYuan-qyy/fund_daily_view/actions/workflows/run-daily-view.yml/dispatches`,
+                                    {
+                                        method: 'POST',
+                                        headers: {
+                                            'Authorization': `token ${process.env.GITHUB_TOKEN}`,
+                                            'Accept': 'application/vnd.github.v3+json',
+                                            'User-Agent': 'Vercel-Trigger-Pipeline'
+                                        },
+                                        body: JSON.stringify({
+                                            ref: 'main',
+                                            inputs: {
+                                                mode: 'profit'
+                                            }
+                                        })
+                                    }
+                                );
+                                
+                                if (dailyViewResponse.ok) {
+                                    console.log('Successfully triggered fund-daily-view calculation on retry');
+                                } else {
+                                    console.log('Failed to trigger fund-daily-view calculation on retry:', dailyViewResponse.status);
+                                }
+                            } catch (error) {
+                                console.log('Error on retry:', error.message);
+                            }
+                        }, 60000); // 再等1分钟
                     }
                 }
             } catch (error) {
-                console.log(`Error checking workflow status (attempt ${attempts}):`, error.message);
+                console.log('Error checking workflow status:', error.message);
             }
-        }
-        
-        if (attempts >= maxAttempts) {
-            console.log('Timeout waiting for fund-sync workflow completion');
-        }
+        }, 60000); // 1分钟后检查状态
     } else {
         // 纯 Notion 操作模式：快速触发，无需等待
         console.log('Pure Notion operation mode, triggering fund-daily-view immediately...');
@@ -160,7 +182,7 @@ export default async function handler(req, res) {
       mode: mode,
       today_only: today_only,
       timestamp: new Date().toISOString(),
-      note: mode === 'all' || mode === 'market' ? 'Waiting for fund-sync to complete, then triggering fund-daily-view.' : 'All operations completed.'
+      note: mode === 'all' || mode === 'market' ? 'Fund-sync triggered successfully. fund-daily-view will be triggered automatically after data update completion.' : 'All operations completed.'
     });
 
   } catch (error) {
