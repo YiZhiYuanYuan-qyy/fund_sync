@@ -48,12 +48,12 @@ export default async function handler(req, res) {
     
         // 根据模式决定等待策略
     if (mode === 'all' || mode === 'market') {
-        // 需要抓取外部数据的模式：等待完成
-        console.log('Waiting for fund-sync workflow to complete (external data fetching)...');
+        // 需要抓取外部数据的模式：等待 fund-sync 完成
+        console.log('Waiting for fund-sync workflow to complete...');
         
         // 轮询检查 workflow 状态
         let attempts = 0;
-        const maxAttempts = 60; // 最多等待30分钟
+        const maxAttempts = 20; // 最多等待10分钟（避免 Vercel 超时）
         
         while (attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 30000)); // 等待30秒
@@ -159,7 +159,8 @@ export default async function handler(req, res) {
       message: 'Pipeline triggered successfully',
       mode: mode,
       today_only: today_only,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      note: mode === 'all' || mode === 'market' ? 'Waiting for fund-sync to complete, then triggering fund-daily-view.' : 'All operations completed.'
     });
 
   } catch (error) {
